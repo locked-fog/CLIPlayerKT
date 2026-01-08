@@ -23,7 +23,7 @@ sealed class Timestamp : ScriptElement {
     data class AbsoluteBeatPlusMs(val beat: Double, val offsetMs: Long) : Timestamp()
 
     // [xxb+xxbxx] -> 指定第几拍 + 分数拍偏移 (例如: 10b+1b3 表示 10拍 + 1/3拍)
-    // 注意：numerator=分子, denominator=分母
+    // numerator=分子, denominator=分母
     data class AbsoluteBeatPlusFraction(val beat: Double, val numerator: Int, val denominator: Int) : Timestamp()
 
     // --- 相对时间 (Relative) ---
@@ -67,11 +67,11 @@ sealed class Command : ScriptElement {
 
     // --- 光标移动 ---
 
-    // [mv x y] 绝对移动 (1-based index)
-    data class MoveAbsolute(val x: Int, val y: Int) : Command()
+    // [mv row, col] 绝对移动 (x=Row, y=Col)
+    data class MoveAbsolute(val row: Int, val col: Int) : Command()
 
-    // [mv +x -y] 相对移动
-    data class MoveRelative(val dx: Int, val dy: Int) : Command()
+    // [mv +row, -col] 相对移动
+    data class MoveRelative(val dRow: Int, val dCol: Int) : Command()
 
     // --- 颜色与背景 ---
 
@@ -82,7 +82,6 @@ sealed class Command : ScriptElement {
     data object ClearColor : Command()
 
     // [background r g b a] 背景色 (0-255)
-    // 注：大多数终端对 Alpha 支持有限，通常只用 RGB，但模型保留 Alpha 字段以备将来支持
     data class SetBackground(val r: Int, val g: Int, val b: Int, val a: Int) : Command()
 
     // [clearbackground] 清除背景色
@@ -105,18 +104,29 @@ sealed class Command : ScriptElement {
     // --- 函数与宏 (Meta Instructions) ---
 
     // [@name content] 定义别名
+    // content 保存为原始字符串，在调用时通过 JIT 解析展开
     data class DefineAlias(val name: String, val content: String) : Command()
 
-    // [#name] 或 [#name p1,p2] 定义函数头
-    // 实际脚本中，函数体是跟随在定义头之后的若干行
-    data class DefineFunction(val name: String, val params: List<String>) : Command()
+    // [#name] 或 [#name p1,p2] 定义函数
+    // rawBodyLines: 函数体的原始文本行列表。
+    // 为了支持参数替换（如 [mv [x],[y]]），必须存储原始文本，
+    // 在调用时进行参数替换后再进行 JIT 解析。
+    data class DefineFunction(
+        val name: String,
+        val params: List<String>,
+        val rawBodyLines: List<String>,
+        val allowOverride: Boolean
+    ) : Command()
 
-    // [name] 或 [name arg1,arg2] 调用函数
+    // [name] 或 [name arg1,arg2] 同步调用函数 (阻塞当前时间轴)
     data class CallFunction(val name: String, val args: List<String>) : Command()
+
+    // [++name] 或 [++name arg1,arg2] 协程调用函数 (新建光标并行执行)
+    data class CallCoroutine(val name: String, val args: List<String>) : Command()
 
     // --- 文本输出 ---
 
-    //[space] or [space n] 输出指定数量的空格
+    // [space] or [space n] 输出指定数量的空格
     data class PrintSpace(val count: Int) : Command()
 
     // 脚本中的纯文本内容
